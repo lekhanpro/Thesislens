@@ -26,13 +26,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body style={{ display: "flex", minHeight: "100vh" }}>
+      <body>
+        <div
+          style={{
+            display: "flex",
+            minHeight: "100vh",
+            backgroundColor: "#04080f",
+            backgroundImage:
+              "radial-gradient(ellipse 100% 60% at 50% -10%, rgba(201,162,39,0.07), transparent), radial-gradient(ellipse 60% 40% at 100% 100%, rgba(20,184,166,0.05), transparent)",
+          }}
+        >
         <Providers>
           <Sidebar />
           <main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
             {children}
           </main>
         </Providers>
+        </div>
       </body>
     </html>
   );

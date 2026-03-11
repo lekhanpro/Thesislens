@@ -31,11 +31,12 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-color: #04080f;
   }
 
   body {
     @apply min-h-screen;
-    background-color: var(--navy-950);
+    background-color: #04080f;
     color: #e2e8f0;
     background-image:
       radial-gradient(ellipse 100% 60% at 50% -10%, rgba(201,162,39,0.07), transparent),

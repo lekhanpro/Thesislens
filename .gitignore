@@ -15,3 +15,6 @@ Thumbs.db
 
 # Uploads (tmp only — Vercel Blob handles persistence)
 /tmp/
+
+.vercel
+.env*.local

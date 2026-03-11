@@ -57,32 +57,34 @@ export function useUploadPaper() {
       const isBlobConfigured = typeof window !== "undefined"; // always true client-side
 
       // ── Phase 1: Try Vercel Blob client upload (bypasses 4.5MB limit) ──
-      if (isBlobConfigured) {
-        try {
-          // Check if server supports blob upload
-          const { upload } = await import("@vercel/blob/client");
-          const blob = await upload(file.name, file, {
-            access: "public",
-            handleUploadUrl: "/api/upload/blob",
-          });
+      try {
+        const { upload } = await import("@vercel/blob/client");
+        const blob = await upload(file.name, file, {
+          access: "public",
+          handleUploadUrl: "/api/upload/blob",
+        });
 
-          // ── Phase 2: Process the uploaded PDF ──
-          const paper = await apiFetch<Paper>("/api/process", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              blobUrl: blob.url,
-              filename: file.name,
-            }),
-          });
-          return paper;
-        } catch (blobErr: any) {
-          // If blob upload fails (e.g. no BLOB_READ_WRITE_TOKEN), fall through to local path
-          console.warn("[upload] Blob upload failed, trying local path:", blobErr.message);
+        // ── Phase 2: Process the uploaded PDF ──
+        return await apiFetch<Paper>("/api/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobUrl: blob.url,
+            filename: file.name,
+          }),
+        });
+      } catch (blobErr: any) {
+        console.warn("[upload] Blob upload failed:", blobErr.message);
+
+        // If file is > 3.5MB, we CANNOT fall back to local base64 because it will hit Vercel 4.5MB limit.
+        if (file.size > 3.5 * 1024 * 1024) {
+          throw new Error(
+            "Vercel Blob is required for files >3.5MB. Please add a Vercel Blob store in your project Storage tab."
+          );
         }
       }
 
-      // ── Fallback: base64 encode and send to /api/process (for local dev) ──
+      // ── Fallback: base64 encode and send to /api/process (for local dev <3.5MB) ──
       const arrayBuf = await file.arrayBuffer();
       const base64 = btoa(
         new Uint8Array(arrayBuf).reduce((acc, byte) => acc + String.fromCharCode(byte), "")

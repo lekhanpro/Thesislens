@@ -14,6 +14,8 @@ export interface Paper {
   uploadedAt: string;
   status: "ready" | "processing" | "error";
   references: Reference[];
+  /** Full extracted text — stored in localStorage for stateless AI calls */
+  fullText?: string;
 }
 
 export interface Section {

@@ -1,53 +1,46 @@
 /**
  * POST /api/compare
- * Compare two papers across 7 dimensions using Groq.
+ * Stateless: client sends both papers' titles + full text from localStorage.
+ * Groq compares them and returns the result. No DB needed.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getPaper } from "@/lib/store";
 import { groqJson } from "@/lib/groq";
-import { comparePrompt, buildPaperContext } from "@/lib/prompts";
+import { comparePrompt } from "@/lib/prompts";
 import type { CompareResponse } from "@/lib/types";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { paperId1, paperId2 } = await req.json();
+    const { title1, text1, title2, text2, paperId1, paperId2 } = await req.json();
 
-    if (!paperId1 || !paperId2) {
-      return NextResponse.json(
-        { error: "Both paperId1 and paperId2 are required." },
-        { status: 400 }
-      );
-    }
-    if (paperId1 === paperId2) {
+    if (paperId1 && paperId1 === paperId2) {
       return NextResponse.json(
         { error: "Cannot compare a paper with itself." },
         { status: 400 }
       );
     }
 
-    const [paper1, paper2] = await Promise.all([
-      getPaper(paperId1),
-      getPaper(paperId2),
-    ]);
+    if (!title1 || !title2) {
+      return NextResponse.json(
+        { error: "Both title1 and title2 are required." },
+        { status: 400 }
+      );
+    }
 
-    if (!paper1) return NextResponse.json({ error: "Paper 1 not found." }, { status: 404 });
-    if (!paper2) return NextResponse.json({ error: "Paper 2 not found." }, { status: 404 });
-
-    const ctx1 = buildPaperContext(paper1.title, paper1.abstract, [], 3000);
-    const ctx2 = buildPaperContext(paper2.title, paper2.abstract, [], 3000);
+    const ctx1 = `Title: ${title1}\n\n${(text1 ?? "").slice(0, 6000)}`;
+    const ctx2 = `Title: ${title2}\n\n${(text2 ?? "").slice(0, 6000)}`;
 
     const result = await groqJson<CompareResponse>(
-      comparePrompt(paper1.title, ctx1, paper2.title, ctx2),
+      comparePrompt(title1, ctx1, title2, ctx2),
       4096,
       0.3
     );
 
     return NextResponse.json({
-      paper_1_title: paper1.title,
-      paper_2_title: paper2.title,
+      paper_1_title: title1,
+      paper_2_title: title2,
       dimensions: result.dimensions ?? [],
       verdict: result.verdict ?? "",
     } satisfies CompareResponse);

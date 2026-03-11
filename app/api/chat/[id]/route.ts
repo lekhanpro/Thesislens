@@ -1,13 +1,11 @@
 /**
- * POST /api/chat/[id]      — RAG-powered chat with a paper
- * GET  /api/chat/[id]      — get chat history
- * DELETE /api/chat/[id]    — clear chat history
+ * POST /api/chat/[id] — Stateless RAG chat with a paper.
+ * Client sends pre-retrieved top-k chunks + the question.
+ * Groq generates the answer. No database needed.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getPaper, getChunks, getChatHistory, appendChatMessage, clearChatHistory } from "@/lib/store";
 import { groqJson } from "@/lib/groq";
-import { searchChunks } from "@/lib/rag";
 import { chatPrompt } from "@/lib/prompts";
 import type { ChatResponse, ChatMessage } from "@/lib/types";
 
@@ -15,39 +13,35 @@ export const maxDuration = 60;
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params: _params }: { params: { id: string } }
 ) {
   try {
-    const paper = await getPaper(params.id);
-    if (!paper) {
-      return NextResponse.json({ error: "Paper not found." }, { status: 404 });
-    }
-
     const body = await req.json();
-    const { message, chatHistory = [] }: { message: string; chatHistory: ChatMessage[] } = body;
+    const {
+      message,
+      chatHistory = [],
+      chunks = [],
+    }: {
+      message: string;
+      chatHistory: ChatMessage[];
+      chunks: { section: string; text: string }[];
+    } = body;
 
     if (!message?.trim()) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
 
-    // Retrieve relevant chunks
-    const chunks = await getChunks(params.id);
-    const topChunks = searchChunks(chunks, message, 5);
-
-    if (topChunks.length === 0) {
-      const fallback: ChatResponse = {
+    if (chunks.length === 0) {
+      return NextResponse.json({
         answer:
           "I couldn't find relevant information in this paper to answer your question. Try rephrasing or asking about a specific section.",
         citations: [],
         confidence: "low",
-      };
-      await appendChatMessage(params.id, { role: "user", content: message });
-      await appendChatMessage(params.id, { role: "assistant", content: fallback.answer, citations: [] });
-      return NextResponse.json(fallback);
+      } satisfies ChatResponse);
     }
 
-    // Build context string
-    const context = topChunks
+    // Build context from client-provided top-k chunks
+    const context = chunks
       .map((c, i) => `[Context ${i + 1} — ${c.section}]\n${c.text}`)
       .join("\n\n");
 
@@ -58,14 +52,6 @@ export async function POST(
 
     const prompt = chatPrompt(context, historyStr, message);
     const result = await groqJson<ChatResponse>(prompt, 2048, 0.2);
-
-    // Persist messages to history
-    await appendChatMessage(params.id, { role: "user", content: message });
-    await appendChatMessage(params.id, {
-      role: "assistant",
-      content: result.answer,
-      citations: result.citations ?? [],
-    });
 
     return NextResponse.json({
       answer: result.answer,
@@ -81,26 +67,11 @@ export async function POST(
   }
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const history = await getChatHistory(params.id);
-    return NextResponse.json({ paperId: params.id, messages: history });
-  } catch {
-    return NextResponse.json({ error: "Failed to fetch chat history." }, { status: 500 });
-  }
+// Kept for API compatibility — history is now client-managed (localStorage)
+export async function GET() {
+  return NextResponse.json({ messages: [] });
 }
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    await clearChatHistory(params.id);
-    return NextResponse.json({ message: "Chat history cleared." });
-  } catch {
-    return NextResponse.json({ error: "Failed to clear chat history." }, { status: 500 });
-  }
+export async function DELETE() {
+  return NextResponse.json({ message: "Chat history cleared." });
 }

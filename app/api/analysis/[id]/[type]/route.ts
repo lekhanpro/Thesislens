@@ -1,31 +1,31 @@
 /**
- * GET /api/analysis/[id]/[type]
+ * POST /api/analysis/[id]/[type]
  * type = summary | glossary | viva | related_work
- * ?regenerate=true to force refresh
+ *
+ * Stateless: client sends the paper text/chunks, Groq generates the analysis,
+ * result is returned for client to cache in localStorage. No DB needed.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getPaper, getAnalysis, saveAnalysis } from "@/lib/store";
 import { groqJson } from "@/lib/groq";
 import {
   summaryPrompt,
   glossaryPrompt,
   vivaPrompt,
   relatedWorkPrompt,
-  buildPaperContext,
 } from "@/lib/prompts";
-import type { AnalysisType } from "@/lib/types";
+import type { Reference, Chunk } from "@/lib/types";
 
 export const maxDuration = 60;
 
 const VALID_TYPES = new Set(["summary", "glossary", "viva", "related_work"]);
+const MAX_TEXT = 12_000; // chars sent to Groq (roughly 3k tokens)
 
-export async function GET(
+export async function POST(
   req: NextRequest,
   { params }: { params: { id: string; type: string } }
 ) {
   const { id, type } = params;
-  const regenerate = req.nextUrl.searchParams.get("regenerate") === "true";
 
   if (!VALID_TYPES.has(type)) {
     return NextResponse.json(
@@ -35,48 +35,47 @@ export async function GET(
   }
 
   try {
-    const paper = await getPaper(id);
-    if (!paper) {
-      return NextResponse.json({ error: "Paper not found." }, { status: 404 });
-    }
+    const body = await req.json();
+    const {
+      title = "Untitled",
+      abstract = "",
+      fullText = "",
+      references = [] as Reference[],
+      chunks = [] as Pick<Chunk, "section" | "text">[],
+    } = body;
 
-    // Return cached result if available
-    if (!regenerate) {
-      const cached = await getAnalysis(id, type as AnalysisType);
-      if (cached) {
-        return NextResponse.json({ paperId: id, type, data: cached });
-      }
-    }
-
-    // Build paper context using stored paper data (title + abstract)
-    const ctx = buildPaperContext(paper.title, paper.abstract, [], 4000);
+    // Build context string for Groq — combine abstract + first portion of full text
+    const paperContext =
+      `Title: ${title}\n\nAbstract: ${abstract}\n\n` +
+      (fullText
+        ? fullText.slice(0, MAX_TEXT)
+        : chunks.map((c: Pick<Chunk, "section" | "text">) => `[${c.section}]\n${c.text}`).join("\n\n").slice(0, MAX_TEXT));
 
     let data: unknown;
 
     switch (type) {
       case "summary":
-        data = await groqJson(summaryPrompt(ctx), 2048, 0.3);
+        data = await groqJson(summaryPrompt(paperContext), 2048, 0.3);
         break;
 
       case "glossary":
-        data = await groqJson(glossaryPrompt(ctx), 3000, 0.2);
+        data = await groqJson(glossaryPrompt(paperContext), 3000, 0.2);
         break;
 
       case "viva":
-        data = await groqJson(vivaPrompt(ctx), 4096, 0.4);
+        data = await groqJson(vivaPrompt(paperContext), 4096, 0.4);
         break;
 
       case "related_work": {
-        const refsText = paper.references
+        const refsText = (references as Reference[])
           .map((r) => `[${r.index}] ${r.text}`)
           .join("\n")
           .slice(0, 3000);
-        data = await groqJson(relatedWorkPrompt(ctx, refsText), 3000, 0.3);
+        data = await groqJson(relatedWorkPrompt(paperContext, refsText), 3000, 0.3);
         break;
       }
     }
 
-    await saveAnalysis(id, type as AnalysisType, data);
     return NextResponse.json({ paperId: id, type, data });
   } catch (err) {
     console.error(`[analysis/${type}] Error:`, err);

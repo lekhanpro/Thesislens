@@ -1,16 +1,11 @@
 /**
- * GET /api/papers        — list all papers
+ * GET /api/papers — not needed in localStorage architecture.
+ * Papers are read directly from localStorage on the client.
+ * This stub exists for compatibility.
  */
 
 import { NextResponse } from "next/server";
-import { getAllPapers } from "@/lib/store";
 
 export async function GET() {
-  try {
-    const papers = await getAllPapers();
-    return NextResponse.json(papers);
-  } catch (err) {
-    console.error("[papers] GET error:", err);
-    return NextResponse.json({ error: "Failed to fetch papers." }, { status: 500 });
-  }
+  return NextResponse.json([]);
 }

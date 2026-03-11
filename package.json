@@ -9,33 +9,34 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "14.2.21",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "@tanstack/react-query": "^5.62.8",
     "@vercel/blob": "^0.27.0",
     "@vercel/kv": "^3.0.0",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.15.0",
     "groq-sdk": "^0.9.1",
+    "lucide-react": "^0.468.0",
+    "next": "14.2.21",
     "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^3.11.174",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "react-dropzone": "^14.3.5",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
-    "lucide-react": "^0.468.0",
-    "clsx": "^2.1.1",
-    "uuid": "^11.1.0",
-    "framer-motion": "^11.15.0"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
     "@types/node": "^22.10.2",
+    "@types/pdf-parse": "^1.1.4",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@types/pdf-parse": "^1.1.4",
     "@types/uuid": "^10.0.0",
-    "tailwindcss": "^3.4.17",
-    "postcss": "^8.4.49",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.21"
+    "eslint-config-next": "14.2.21",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
   }
 }

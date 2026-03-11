@@ -54,7 +54,8 @@ export function useUploadPaper() {
   const qc = useQueryClient();
   return useMutation<Paper, Error, File>({
     mutationFn: async (file: File) => {
-      const isBlobConfigured = typeof window !== "undefined";
+      let isBlobUploaded = false;
+      let blobUrl = "";
 
       // ── Phase 1: Try Vercel Blob client upload (bypasses 4.5MB limit) ──
       try {
@@ -63,16 +64,8 @@ export function useUploadPaper() {
           access: "public",
           handleUploadUrl: "/api/upload/blob",
         });
-
-        // ── Phase 2: Process the uploaded PDF ──
-        return await apiFetch<Paper>("/api/process", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            blobUrl: blob.url,
-            filename: file.name,
-          }),
-        });
+        blobUrl = blob.url;
+        isBlobUploaded = true;
       } catch (blobErr: any) {
         console.warn("[upload] Blob upload failed:", blobErr.message);
         
@@ -84,25 +77,38 @@ export function useUploadPaper() {
         }
       }
 
-      // ── Fallback: base64 encode using native FileReader (avoids thread freeze) ──
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(",")[1]); // Extract base64 part
-        };
-        reader.onerror = () => reject(new Error("Failed to read file."));
-        reader.readAsDataURL(file);
-      });
+      // ── Phase 2: Process the uploaded PDF (or local fallback) ──
+      if (isBlobUploaded) {
+        // Process via Blob URL
+        return await apiFetch<Paper>("/api/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobUrl,
+            filename: file.name,
+          }),
+        });
+      } else {
+        // Fallback: base64 encode using native FileReader
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(",")[1]); // Extract base64 part
+          };
+          reader.onerror = () => reject(new Error("Failed to read file."));
+          reader.readAsDataURL(file);
+        });
 
-      return apiFetch<Paper>("/api/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          localData: base64,
-          filename: file.name,
-        }),
-      });
+        return await apiFetch<Paper>("/api/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            localData: base64,
+            filename: file.name,
+          }),
+        });
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["papers"] }),
   });

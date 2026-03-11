@@ -54,7 +54,7 @@ export function useUploadPaper() {
   const qc = useQueryClient();
   return useMutation<Paper, Error, File>({
     mutationFn: async (file: File) => {
-      const isBlobConfigured = typeof window !== "undefined"; // always true client-side
+      const isBlobConfigured = typeof window !== "undefined";
 
       // ── Phase 1: Try Vercel Blob client upload (bypasses 4.5MB limit) ──
       try {
@@ -75,20 +75,26 @@ export function useUploadPaper() {
         });
       } catch (blobErr: any) {
         console.warn("[upload] Blob upload failed:", blobErr.message);
-
-        // If file is > 3.5MB, we CANNOT fall back to local base64 because it will hit Vercel 4.5MB limit.
+        
+        // Ensure the error throws properly if the file is too big to fall back
         if (file.size > 3.5 * 1024 * 1024) {
           throw new Error(
-            "Vercel Blob is required for files >3.5MB. Please add a Vercel Blob store in your project Storage tab."
+            "Vercel Blob is required for files >3.5MB. Please add a Vercel Blob store in your project Storage tab, then REDEPLOY."
           );
         }
       }
 
-      // ── Fallback: base64 encode and send to /api/process (for local dev <3.5MB) ──
-      const arrayBuf = await file.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(arrayBuf).reduce((acc, byte) => acc + String.fromCharCode(byte), "")
-      );
+      // ── Fallback: base64 encode using native FileReader (avoids thread freeze) ──
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]); // Extract base64 part
+        };
+        reader.onerror = () => reject(new Error("Failed to read file."));
+        reader.readAsDataURL(file);
+      });
+
       return apiFetch<Paper>("/api/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

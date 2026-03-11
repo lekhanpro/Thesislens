@@ -1,0 +1,17 @@
+# Runtime
+.next/
+node_modules/
+out/
+
+# Env files
+.env.local
+.env
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Uploads (tmp only — Vercel Blob handles persistence)
+/tmp/

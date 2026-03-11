@@ -24,6 +24,10 @@ export async function parsePdf(buffer: Buffer): Promise<ParsedPdf> {
   const fullText: string = data.text || "";
   const totalPages: number = data.numpages || 0;
 
+  return parseExtractedText(fullText, totalPages);
+}
+
+export function parseExtractedText(fullText: string, totalPages: number): ParsedPdf {
   const pageTexts = splitIntoPages(fullText, totalPages);
 
   const title = extractTitle(pageTexts);

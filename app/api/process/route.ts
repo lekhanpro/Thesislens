@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { parsePdf } from "@/lib/pdf-parser";
+import { parsePdf, parseExtractedText } from "@/lib/pdf-parser";
 import { chunkSections } from "@/lib/rag";
 import { savePaper, saveChunks } from "@/lib/store";
 import type { Paper } from "@/lib/types";
@@ -20,43 +20,53 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { blobUrl, filename, localData } = body as {
+    const { blobUrl, filename, localData, clientText, clientTotalPages } = body as {
       blobUrl?: string;
       filename: string;
       localData?: string; // base64 for local dev
+      clientText?: string; // Client extracted text
+      clientTotalPages?: number; // Client extracted page count
     };
 
     if (!filename?.toLowerCase().endsWith(".pdf")) {
       return NextResponse.json({ error: "Only PDF files are accepted." }, { status: 400 });
     }
 
-    let buffer: Buffer;
+    const paperId = uuidv4();
+    let parsed: any;
+    let actualBlobUrl: string = blobUrl || `/local/${paperId}/${filename}`;
 
-    if (localData) {
-      // Local dev: base64-encoded PDF
-      buffer = Buffer.from(localData, "base64");
-    } else if (blobUrl) {
-      // Production: fetch from Vercel Blob
-      const res = await fetch(blobUrl);
-      if (!res.ok) {
+    if (clientText) {
+      // Production path for large files: browser already parsed it!
+      // No 4.5MB Next.js limits. No serverless 60s CPU timeout!
+      console.log(`[process] Using client-extracted text for ${filename} (${clientTotalPages} pages)`);
+      parsed = parseExtractedText(clientText, Number(clientTotalPages) || 1);
+    } else {
+      let buffer: Buffer;
+
+      if (localData) {
+        // Local dev fallback 
+        buffer = Buffer.from(localData, "base64");
+      } else if (blobUrl) {
+        // Server-side parsing fallback (if browser couldn't extract text)
+        const res = await fetch(blobUrl);
+        if (!res.ok) {
+          return NextResponse.json(
+            { error: `Failed to fetch PDF from blob: ${res.status}` },
+            { status: 500 }
+          );
+        }
+        const arrayBuf = await res.arrayBuffer();
+        buffer = Buffer.from(arrayBuf);
+      } else {
         return NextResponse.json(
-          { error: `Failed to fetch PDF from blob: ${res.status}` },
-          { status: 500 }
+          { error: "Must provide clientText, blobUrl, or localData." },
+          { status: 400 }
         );
       }
-      const arrayBuf = await res.arrayBuffer();
-      buffer = Buffer.from(arrayBuf);
-    } else {
-      return NextResponse.json(
-        { error: "Either blobUrl or localData must be provided." },
-        { status: 400 }
-      );
+
+      parsed = await parsePdf(buffer);
     }
-
-    const paperId = uuidv4();
-
-    // Parse the PDF
-    const parsed = await parsePdf(buffer);
 
     // Build chunks and save them
     const chunks = chunkSections(paperId, parsed.sections);
@@ -69,7 +79,7 @@ export async function POST(req: NextRequest) {
       abstract: parsed.abstract,
       authors: parsed.authors,
       filename,
-      blobUrl: blobUrl ?? `/local/${paperId}/${filename}`,
+      blobUrl: actualBlobUrl,
       totalPages: parsed.totalPages,
       totalSections: parsed.sections.length,
       uploadedAt: new Date().toISOString(),

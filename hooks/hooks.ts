@@ -54,61 +54,54 @@ export function useUploadPaper() {
   const qc = useQueryClient();
   return useMutation<Paper, Error, File>({
     mutationFn: async (file: File) => {
-      let isBlobUploaded = false;
-      let blobUrl = "";
-
-      // ── Phase 1: Try Vercel Blob client upload (bypasses 4.5MB limit) ──
-      try {
-        const { upload } = await import("@vercel/blob/client");
-        const blob = await upload(file.name, file, {
-          access: "public",
-          handleUploadUrl: "/api/upload/blob",
-        });
-        blobUrl = blob.url;
-        isBlobUploaded = true;
-      } catch (blobErr: any) {
-        console.warn("[upload] Blob upload failed:", blobErr.message);
-        
-        // Ensure the error throws properly if the file is too big to fall back
-        if (file.size > 3.5 * 1024 * 1024) {
-          throw new Error(
-            "Vercel Blob is required for files >3.5MB. Please add a Vercel Blob store in your project Storage tab, then REDEPLOY."
-          );
+      // ── Phase 1: Client-Side Text Extraction (Solves 4.5MB & CPU timeouts) ──
+      const { text, numPages } = await new Promise<{ text: string; numPages: number }>((resolve, reject) => {
+        if ((window as any).pdfjsLib) {
+          extract((window as any).pdfjsLib);
+        } else {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+          script.onload = () => extract((window as any).pdfjsLib);
+          script.onerror = () => reject(new Error("Failed to load PDF engine"));
+          document.head.appendChild(script);
         }
-      }
 
-      // ── Phase 2: Process the uploaded PDF (or local fallback) ──
-      if (isBlobUploaded) {
-        // Process via Blob URL
-        return await apiFetch<Paper>("/api/process", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            blobUrl,
-            filename: file.name,
-          }),
-        });
-      } else {
-        // Fallback: base64 encode using native FileReader
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1]); // Extract base64 part
-          };
-          reader.onerror = () => reject(new Error("Failed to read file."));
-          reader.readAsDataURL(file);
-        });
+        async function extract(pdfjsLib: any) {
+          try {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({
+              data: arrayBuffer,
+              cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
+              cMapPacked: true,
+            }).promise;
+            
+            let fullText = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const content = await page.getTextContent();
+              const pageText = content.items.map((item: any) => item.str).join(" ");
+              fullText += pageText + "\n\n";
+            }
+            resolve({ text: fullText, numPages: pdf.numPages });
+          } catch (err) {
+            console.error("PDF extraction error:", err);
+            reject(new Error("Failed to read PDF. It might be encrypted or corrupted."));
+          }
+        }
+      });
 
-        return await apiFetch<Paper>("/api/process", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            localData: base64,
-            filename: file.name,
-          }),
-        });
-      }
+      // ── Phase 2: Send purely extracted logic to server ──
+      // This is blazing fast and never hits Vercel's 4.5MB limit.
+      return await apiFetch<Paper>("/api/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientText: text,
+          clientTotalPages: numPages,
+          filename: file.name,
+        }),
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["papers"] }),
   });

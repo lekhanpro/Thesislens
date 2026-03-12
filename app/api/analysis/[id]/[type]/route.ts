@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { groqJson } from "@/lib/groq";
+import { groqJson, unwrapArray } from "@/lib/groq";
 import {
   summaryPrompt,
   glossaryPrompt,
@@ -49,7 +49,10 @@ export async function POST(
       `Title: ${title}\n\nAbstract: ${abstract}\n\n` +
       (fullText
         ? fullText.slice(0, MAX_TEXT)
-        : chunks.map((c: Pick<Chunk, "section" | "text">) => `[${c.section}]\n${c.text}`).join("\n\n").slice(0, MAX_TEXT));
+        : chunks
+            .map((c: Pick<Chunk, "section" | "text">) => `[${c.section}]\n${c.text}`)
+            .join("\n\n")
+            .slice(0, MAX_TEXT));
 
     let data: unknown;
 
@@ -58,13 +61,19 @@ export async function POST(
         data = await groqJson(summaryPrompt(paperContext), 2048, 0.3);
         break;
 
-      case "glossary":
-        data = await groqJson(glossaryPrompt(paperContext), 3000, 0.2);
+      case "glossary": {
+        // Prompt returns { terms: [...] } — extract the array
+        const raw = await groqJson<{ terms?: unknown[]; [key: string]: unknown }>(glossaryPrompt(paperContext), 3000, 0.2);
+        data = raw?.terms ?? unwrapArray(raw as any);
         break;
+      }
 
-      case "viva":
-        data = await groqJson(vivaPrompt(paperContext), 4096, 0.4);
+      case "viva": {
+        // Prompt returns { questions: [...] } — extract the array
+        const raw = await groqJson<{ questions?: unknown[]; [key: string]: unknown }>(vivaPrompt(paperContext), 4096, 0.4);
+        data = raw?.questions ?? unwrapArray(raw as any);
         break;
+      }
 
       case "related_work": {
         const refsText = (references as Reference[])

@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { groqJson } from "@/lib/groq";
+import { groqJson, groqText } from "@/lib/groq";
 import { chatPrompt } from "@/lib/prompts";
 import type { ChatResponse, ChatMessage } from "@/lib/types";
 
@@ -34,7 +34,8 @@ export async function POST(
     if (chunks.length === 0) {
       return NextResponse.json({
         answer:
-          "I couldn't find relevant information in this paper to answer your question. Try rephrasing or asking about a specific section.",
+          "I couldn't find relevant information in this paper to answer your question. " +
+          "Try rephrasing or asking about a specific section.",
         citations: [],
         confidence: "low",
       } satisfies ChatResponse);
@@ -51,7 +52,30 @@ export async function POST(
       .join("\n");
 
     const prompt = chatPrompt(context, historyStr, message);
-    const result = await groqJson<ChatResponse>(prompt, 2048, 0.2);
+
+    // Try JSON response first, fall back to text
+    let result: ChatResponse;
+    try {
+      result = await groqJson<ChatResponse>(prompt, 2048, 0.2);
+      // Validate we got an answer
+      if (!result?.answer) {
+        throw new Error("No answer field in response");
+      }
+    } catch (jsonErr) {
+      console.warn("[chat] JSON parse failed, falling back to text:", jsonErr);
+      // Fallback: plain text response
+      const textAnswer = await groqText(
+        "You are a helpful academic research assistant. Answer the user's question based on the provided paper context. Be clear and concise.",
+        `Context from paper:\n${context}\n\nQuestion: ${message}`,
+        1024,
+        0.3
+      );
+      result = {
+        answer: textAnswer || "I was unable to generate a response. Please try again.",
+        citations: [],
+        confidence: "medium",
+      };
+    }
 
     return NextResponse.json({
       answer: result.answer,

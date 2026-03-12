@@ -33,21 +33,21 @@ Upload academic PDFs, get AI-powered summaries, chat with citations, compare pap
 │                                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │                  Frontend (React)                    │  │
-│  │  Dashboard · Upload · Paper[id] · Compare           │  │
-│  │  React Query hooks → fetch() → Next.js API routes   │  │
+│  │  Dashboard · Upload · Paper[id] · Compare            │  │
+│  │  React Query hooks → fetch() → Next.js API routes    │  │
 │  └──────────────────┬───────────────────────────────────┘  │
 │                     │                                      │
 │  ┌──────────────────▼───────────────────────────────────┐  │
-│  │              API Routes (Node.js / Vercel Serverless) │  │
-│  │  /api/upload → parse PDF → chunk → save to KV       │  │
-│  │  /api/papers → list/get/delete from KV              │  │
-│  │  /api/analysis/[id]/[type] → Groq LLM (cached KV)  │  │
-│  │  /api/chat/[id] → BM25 search chunks → Groq         │  │
-│  │  /api/compare → Groq comparison                     │  │
+│  │              API Routes (Node.js / Vercel Serverless)│  │
+│  │  /api/upload → parse PDF → chunk → save to KV        │  │
+│  │  /api/papers → list/get/delete from KV               │  │
+│  │  /api/analysis/[id]/[type] → Groq LLM (cached KV)    │  │
+│  │  /api/chat/[id] → BM25 search chunks → Groq          │  │
+│  │  /api/compare → Groq comparison                      │  │
 │  └──────────────────┬───────────────────────────────────┘  │
 │                     │                                      │
 │  ┌──────────────────▼───────────────────────────────────┐  │
-│  │                   Storage                             │  │
+│  │                   Storage                            │  │
 │  │  Vercel Blob → PDF files (persistent)                │  │
 │  │  Vercel KV   → metadata, chunks, chat, analysis      │  │
 │  └──────────────────────────────────────────────────────┘  │

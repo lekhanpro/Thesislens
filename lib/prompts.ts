@@ -1,5 +1,9 @@
 /**
  * Centralized Groq system prompts — mirrors the Python version but for the JS client.
+ * 
+ * NOTE: When using Groq's json_object response_format mode, the model MUST return
+ * a JSON object (not a bare array). Prompts that expect arrays wrap them in an object.
+ * The unwrapArray() helper in groq.ts extracts the array back out.
  */
 
 export function summaryPrompt(paperContent: string): string {
@@ -8,7 +12,7 @@ export function summaryPrompt(paperContent: string): string {
 PAPER:
 ${paperContent}
 
-Respond ONLY with JSON:
+Respond ONLY with valid JSON object:
 {
   "overview": "3-5 sentence plain-language overview",
   "problem_statement": "What problem does this paper solve? (simple terms)",
@@ -31,10 +35,12 @@ RULES:
 PAPER:
 ${paperContent}
 
-Respond ONLY with a JSON array:
-[
-  {"term": "Term Name", "definition": "Simple definition", "context": "How used in this paper"}
-]`;
+Respond ONLY with a valid JSON object containing a "terms" array:
+{
+  "terms": [
+    {"term": "Term Name", "definition": "Simple definition", "context": "How used in this paper"}
+  ]
+}`;
 }
 
 export function vivaPrompt(paperContent: string): string {
@@ -45,14 +51,18 @@ ${paperContent}
 
 Generate EXACTLY 10 questions (3 easy, 4 medium, 3 hard). Base ALL questions strictly on the paper content.
 
-Respond ONLY with a JSON array:
-[
-  {
-    "question": "The question",
-    "suggested_answer": "Comprehensive answer demonstrating mastery",
-    "difficulty": "easy|medium|hard"
-  }
-]`;
+Respond ONLY with a valid JSON object containing a "questions" array:
+{
+  "questions": [
+    {
+      "question": "The question text",
+      "suggested_answer": "Comprehensive answer demonstrating mastery",
+      "difficulty": "easy"
+    }
+  ]
+}
+
+Use "easy", "medium", or "hard" for difficulty values.`;
 }
 
 export function relatedWorkPrompt(paperContent: string, refsContent: string): string {
@@ -64,7 +74,7 @@ ${paperContent}
 REFERENCES:
 ${refsContent}
 
-Respond ONLY with JSON:
+Respond ONLY with a valid JSON object:
 {
   "summary": "3-5 sentence overview of the related work landscape",
   "themes": ["Theme 1: description", "Theme 2: description"],
@@ -99,14 +109,16 @@ ${history || "None"}
 
 QUESTION: ${question}
 
-Respond ONLY with JSON:
+Respond ONLY with a valid JSON object:
 {
   "answer": "Your answer based strictly on context",
   "citations": [
     {"section": "Section name", "excerpt": "Short relevant quote (max 100 words)", "page": 0}
   ],
-  "confidence": "high|medium|low"
-}`;
+  "confidence": "high"
+}
+
+Use "high", "medium", or "low" for confidence.`;
 }
 
 export function comparePrompt(
@@ -123,7 +135,7 @@ ${content1}
 PAPER 2 — "${title2}":
 ${content2}
 
-Respond ONLY with JSON:
+Respond ONLY with a valid JSON object:
 {
   "dimensions": [
     {"dimension": "Problem Statement", "paper_1": "...", "paper_2": "..."},
